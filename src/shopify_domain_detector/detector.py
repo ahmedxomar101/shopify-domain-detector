@@ -4,10 +4,14 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-from .domains import is_same_domain, normalize
+from .domains import base_domain, is_same_domain, normalize
 from .http import PROBE_TIMEOUT, build_request, cart_js_is_shopify, open_url
 from .models import Category, DomainResult, ProbeResult
 from .signatures import detect_platforms, is_suspended
+from .subdomains import extract_shop_hosts
+
+# Cap subdomain cart.js probes to bound the number of extra requests per domain.
+_MAX_SUBDOMAIN_PROBES = 6
 
 
 def categorize(probe: ProbeResult) -> tuple[Category, str | None]:
@@ -70,6 +74,9 @@ def probe_domain(domain: str) -> ProbeResult:
                         resolved_domain=candidate,
                         server=resp.headers.get("Server", ""),
                         html_size=len(body),
+                        shop_subdomains=tuple(
+                            extract_shop_hosts(body, base_domain(domain))
+                        ),
                     )
             except urllib.error.HTTPError as e:
                 try:
@@ -84,25 +91,99 @@ def probe_domain(domain: str) -> ProbeResult:
                     rate_limited=(e.code == 429),
                     resolved_domain=candidate,
                     html_size=len(body),
+                    shop_subdomains=tuple(
+                        extract_shop_hosts(body, base_domain(domain))
+                    ) if body else (),
                 )
             except Exception:
                 continue
     return ProbeResult(domain=domain, status="unreachable")
 
 
+_REASONS = {
+    Category.CONFIRMED_SHOPIFY: "shopify cart.js / signature",
+    Category.SHOPIFY_IN_HTML_ACTIVE: "shopify cart.js / signature",
+    Category.SHOPIFY_IN_HTML_SUSPENDED: "shopify store unavailable/suspended",
+    Category.DEAD: "unreachable",
+    Category.RATE_LIMITED: "rate limited (429)",
+    Category.BOT_PROTECTED: "bot-protected (403)",
+}
+
+
+def reason_for(category: Category, probe: ProbeResult) -> str:
+    """Short human explanation for a categorized probe outcome."""
+    if category == Category.NOT_SHOPIFY:
+        platform = next((p for p in probe.platforms if p != "shopify"), None)
+        return "no shopify signal" + (f"; platform={platform}" if platform else "")
+    return _REASONS.get(category, "")
+
+
+def _confirmed(domain: str, host: str, match_type: str, reason: str) -> DomainResult:
+    return DomainResult(
+        domain,
+        Category.CONFIRMED_SHOPIFY,
+        discovered_domain=host,
+        match_type=match_type,
+        reason=reason,
+        status=200,
+    )
+
+
+def _classify_via_redirect(d: str, resolved: str) -> DomainResult | None:
+    """Classify using the redirect target's /cart.js, or None if not Shopify."""
+    if not cart_js_is_shopify(resolved):
+        return None
+    if not is_same_domain(resolved, d):
+        return DomainResult(
+            d,
+            Category.REDIRECTS_TO_SHOPIFY,
+            discovered_domain=resolved,
+            match_type="redirect",
+            reason=f"redirects to shopify ({resolved})",
+        )
+    match_type = "www" if resolved.startswith("www.") else "apex"
+    return _confirmed(d, resolved, match_type, f"cart.js on {match_type}")
+
+
+def _classify_via_subdomain(d: str, probe: ProbeResult) -> DomainResult | None:
+    """Probe storefront subdomain candidates; confirm on the first hit."""
+    for sub in probe.shop_subdomains[:_MAX_SUBDOMAIN_PROBES]:
+        if cart_js_is_shopify(sub):
+            return _confirmed(d, sub, "subdomain", f"cart.js on subdomain ({sub})")
+    return None
+
+
 def classify_domain(domain: str) -> DomainResult:
-    """Full pipeline for one domain: cart.js -> redirect -> probe -> categorize."""
+    """Full pipeline: cart.js -> www -> redirect -> probe -> subdomain -> categorize."""
     d = normalize(domain)
     if cart_js_is_shopify(d):
-        return DomainResult(d, Category.CONFIRMED_SHOPIFY, status=200)
+        return _confirmed(d, d, "apex", "cart.js on apex")
+
+    wwwhost = d if d.startswith("www.") else f"www.{d}"
+    if wwwhost != d and cart_js_is_shopify(wwwhost):
+        return _confirmed(d, wwwhost, "www", "cart.js on www")
+
     resolved = _resolve_redirect(d)
-    if resolved and not is_same_domain(resolved, d) and cart_js_is_shopify(resolved):
-        return DomainResult(d, Category.REDIRECTS_TO_SHOPIFY, redirects_to=resolved)
-    if resolved and is_same_domain(resolved, d) and cart_js_is_shopify(resolved):
-        return DomainResult(d, Category.CONFIRMED_SHOPIFY, status=200)
+    if resolved:
+        via_redirect = _classify_via_redirect(d, resolved)
+        if via_redirect:
+            return via_redirect
+
     probe = probe_domain(d)
+    via_subdomain = _classify_via_subdomain(d, probe)
+    if via_subdomain:
+        return via_subdomain
+
     category, platform = categorize(probe)
-    return DomainResult(d, category, platform=platform, status=probe.status)
+    return DomainResult(
+        d,
+        category,
+        platform=platform,
+        discovered_domain=None,
+        match_type="",
+        reason=reason_for(category, probe),
+        status=probe.status,
+    )
 
 
 def classify_domains(domains: list[str], workers: int = 15) -> dict[str, DomainResult]:
