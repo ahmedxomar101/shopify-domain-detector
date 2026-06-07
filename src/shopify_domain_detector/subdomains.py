@@ -9,9 +9,18 @@ _MYSHOPIFY_RE = re.compile(r"\b([a-z0-9][a-z0-9-]*\.myshopify\.com)\b")
 _PREFIXES = ("shop", "store")
 
 
-def _body_storefront_hosts(body: str, base: str) -> list[str]:
-    """shop.<base> / store.<base> hosts that literally appear in the body."""
-    return [f"{p}.{base}" for p in _PREFIXES if f"{p}.{base}" in body]
+def _subdomain_hosts(body: str, base: str) -> list[str]:
+    """Every *.<base> host that literally appears in the body, in document order.
+
+    Matches any subdomain label (single or multi-level), e.g. eu.x.com,
+    checkout.eu.x.com. Uses a compiled regex with the escaped base."""
+    escaped = re.escape(base)
+    # Trailing negative lookahead so `base.com` is NOT captured out of a longer
+    # domain like `base.com.evil.com` (the host must end at the registrable base).
+    pattern = re.compile(
+        r"\b([a-z0-9][a-z0-9.-]*\." + escaped + r")(?![a-z0-9.-])"
+    )
+    return pattern.findall(body)
 
 
 def _myshopify_hosts(body: str) -> list[str]:
@@ -23,11 +32,17 @@ def extract_shop_hosts(body: str, base: str) -> list[str]:
     """Candidate Shopify storefront hosts to check for a domain.
 
     Pure: regex/string scan only, no network. `body` must be lowercased and
-    `base` is the registrable domain. Returns body-discovered hosts first, then
-    the blind shop./store. fallbacks, deduped and excluding base/www.base."""
+    `base` is the registrable domain.
+
+    Order:
+    1. HTML-harvested *.<base> hosts (document order, any subdomain label)
+    2. *.myshopify.com refs from the body
+    3. Blind shop.<base> / store.<base> fallbacks
+
+    Deduped; excludes base itself and www.<base>."""
     excluded = {base, f"www.{base}"}
     blind = [f"{p}.{base}" for p in _PREFIXES]
-    ordered = _body_storefront_hosts(body, base) + _myshopify_hosts(body) + blind
+    ordered = _subdomain_hosts(body, base) + _myshopify_hosts(body) + blind
 
     seen: set[str] = set()
     result: list[str] = []

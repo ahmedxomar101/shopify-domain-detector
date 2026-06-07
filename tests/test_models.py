@@ -49,3 +49,33 @@ def test_domain_result_discovered_domain_and_match_type():
     assert r.discovered_domain == "shop.x.com"
     assert r.match_type == "subdomain"
     assert r.reason.startswith("cart.js")
+
+
+# v0.3.0: SHOPIFY_PASSWORD_PROTECTED category
+
+def test_shopify_password_protected_category_value():
+    assert Category.SHOPIFY_PASSWORD_PROTECTED.value == "shopify-password-protected"
+
+
+def test_shopify_password_protected_is_not_healthy():
+    assert not Category.SHOPIFY_PASSWORD_PROTECTED.is_healthy
+
+
+def test_probe_result_password_protected_defaults_false():
+    p = ProbeResult(domain="x.com")
+    assert p.password_protected is False
+
+
+def test_probe_result_shopify_strong_defaults_false():
+    p = ProbeResult(domain="x.com")
+    assert p.shopify_strong is False
+
+
+def test_probe_result_password_protected_can_be_set():
+    p = ProbeResult(domain="x.com", password_protected=True)
+    assert p.password_protected is True
+
+
+def test_probe_result_shopify_strong_can_be_set():
+    p = ProbeResult(domain="x.com", shopify_strong=True)
+    assert p.shopify_strong is True

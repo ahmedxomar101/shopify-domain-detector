@@ -68,3 +68,123 @@ def test_classify_domains_survives_a_worker_exception():
         out = detector.classify_domains(["ok.com", "boom.com"], workers=2)
     assert out["ok.com"].category == Category.CONFIRMED_SHOPIFY
     assert out["boom.com"].category == Category.DEAD  # errored domain is not lost
+
+
+# v0.3.0: headless + password-protected subdomain tests
+
+def test_subdomain_headless_shopify_via_shopify_strong():
+    """No cart.js on subdomain, but shopify.com in HTML → SHOPIFY_IN_HTML_ACTIVE."""
+    headless_probe = ProbeResult(
+        domain="eu.x.com", status=200, platforms=(),
+        shopify_strong=True, password_protected=False,
+    )
+    apex_probe = ProbeResult(
+        domain="x.com", status=200, platforms=("wordpress",),
+        shop_subdomains=("eu.x.com",),
+    )
+
+    with patch.object(detector, "cart_js_is_shopify", return_value=False), \
+         patch.object(detector, "_resolve_redirect", return_value=None), \
+         patch.object(detector, "probe_domain", side_effect=[apex_probe, headless_probe]):
+        r = detector.classify_domain("x.com")
+
+    assert r.category == Category.SHOPIFY_IN_HTML_ACTIVE
+    assert r.discovered_domain == "eu.x.com"
+    assert r.match_type == "subdomain"
+
+
+def test_subdomain_password_protected_returns_password_category():
+    """Subdomain redirects to /password with shopify.com → SHOPIFY_PASSWORD_PROTECTED."""
+    locked_probe = ProbeResult(
+        domain="shop.x.com", status=200, platforms=("shopify",),
+        shopify_strong=True, password_protected=True,
+    )
+    apex_probe = ProbeResult(
+        domain="x.com", status=200, platforms=("wordpress",),
+        shop_subdomains=("shop.x.com",),
+    )
+
+    with patch.object(detector, "cart_js_is_shopify", return_value=False), \
+         patch.object(detector, "_resolve_redirect", return_value=None), \
+         patch.object(detector, "probe_domain", side_effect=[apex_probe, locked_probe]):
+        r = detector.classify_domain("x.com")
+
+    assert r.category == Category.SHOPIFY_PASSWORD_PROTECTED
+    assert r.discovered_domain == "shop.x.com"
+    assert r.match_type == "subdomain"
+
+
+def test_open_subdomain_wins_over_locked_subdomain():
+    """If eu.x.com is open (shopify_strong) and shop.x.com is locked, open wins."""
+    locked_probe = ProbeResult(
+        domain="shop.x.com", status=200, platforms=("shopify",),
+        shopify_strong=True, password_protected=True,
+    )
+    open_probe = ProbeResult(
+        domain="eu.x.com", status=200, platforms=(),
+        shopify_strong=True, password_protected=False,
+    )
+    # eu.x.com comes first (HTML-harvested), shop.x.com is blind fallback
+    apex_probe = ProbeResult(
+        domain="x.com", status=200, platforms=("wordpress",),
+        shop_subdomains=("eu.x.com", "shop.x.com"),
+    )
+
+    def fake_probe(host):
+        mapping = {
+            "x.com": apex_probe,
+            "eu.x.com": open_probe,
+            "shop.x.com": locked_probe,
+        }
+        return mapping[host]
+
+    with patch.object(detector, "cart_js_is_shopify", return_value=False), \
+         patch.object(detector, "_resolve_redirect", return_value=None), \
+         patch.object(detector, "probe_domain", side_effect=fake_probe):
+        r = detector.classify_domain("x.com")
+
+    assert r.category == Category.SHOPIFY_IN_HTML_ACTIVE
+    assert r.discovered_domain == "eu.x.com"
+
+
+def test_apex_password_protected_classified_correctly():
+    """Apex probe with password_protected + shopify → SHOPIFY_PASSWORD_PROTECTED."""
+    pw_probe = ProbeResult(
+        domain="newbrand.com", status=200, platforms=("shopify",),
+        password_protected=True, shopify_strong=True,
+    )
+    with patch.object(detector, "cart_js_is_shopify", return_value=False), \
+         patch.object(detector, "_resolve_redirect", return_value=None), \
+         patch.object(detector, "probe_domain", return_value=pw_probe):
+        r = detector.classify_domain("newbrand.com")
+
+    assert r.category == Category.SHOPIFY_PASSWORD_PROTECTED
+
+
+def test_bare_shopify_word_no_dot_com_is_not_shopify_strong():
+    """Body with 'we love shopify' but no 'shopify.com' must not trigger strong signal."""
+    weak_probe = ProbeResult(
+        domain="x.com", status=200, platforms=("shopify",),
+        shopify_strong=False, password_protected=False,
+    )
+    apex_probe = ProbeResult(
+        domain="x.com", status=200, platforms=(),
+        shop_subdomains=("shop.x.com",),
+    )
+
+    with patch.object(detector, "cart_js_is_shopify", return_value=False), \
+         patch.object(detector, "_resolve_redirect", return_value=None), \
+         patch.object(detector, "probe_domain", side_effect=[apex_probe, weak_probe]):
+        r = detector.classify_domain("x.com")
+
+    # The subdomain has only a bare "shopify" mention (shopify_strong=False), so it
+    # must NOT be recovered as a Shopify subdomain — no false positive.
+    assert r.category == Category.NOT_SHOPIFY
+    assert r.discovered_domain is None
+
+
+def test_reason_for_password_protected():
+    """reason_for returns a non-empty human string for SHOPIFY_PASSWORD_PROTECTED."""
+    probe = ProbeResult(domain="x.com", status=200, password_protected=True)
+    reason = detector.reason_for(Category.SHOPIFY_PASSWORD_PROTECTED, probe)
+    assert reason and "password" in reason.lower()
