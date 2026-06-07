@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,15 +22,16 @@ def categorize(probe: ProbeResult) -> tuple[Category, str | None]:
     platforms = probe.platforms
     has_shopify = "shopify" in platforms
     is_4xx_plus = isinstance(status, int) and status >= 400
-    has_shopify_signal = has_shopify or probe.shopify_strong
 
     if probe.rate_limited:
         return Category.RATE_LIMITED, None
     if isinstance(status, int) and status == 403 and not platforms:
         return Category.BOT_PROTECTED, None
     # Password-protected must come before active/suspended: a /password redirect
-    # means the store is pre-launch and not yet open, regardless of HTML signals.
-    if probe.password_protected and has_shopify_signal:
+    # means the store is pre-launch and not yet open. Require the STRONG signal
+    # (shopify.com), not the bare "shopify" keyword, to avoid misclassifying a
+    # non-Shopify /password page that merely mentions the word "shopify".
+    if probe.password_protected and probe.shopify_strong:
         return Category.SHOPIFY_PASSWORD_PROTECTED, None
     if has_shopify and not probe.suspended_shopify and status == 200:
         return Category.SHOPIFY_IN_HTML_ACTIVE, None
@@ -60,8 +62,8 @@ def _resolve_redirect(domain: str) -> str | None:
 
 
 def _is_password_path(url: str) -> bool:
-    """True if the final URL resolved to /password (or /password/)."""
-    import urllib.parse
+    """True if the final URL resolved to /password (with or without a trailing
+    slash or query string, e.g. /password?checkout_url=...)."""
     path = urllib.parse.urlsplit(url).path.rstrip("/")
     return path == "/password"
 
@@ -164,10 +166,12 @@ def _classify_via_redirect(d: str, resolved: str) -> DomainResult | None:
 def _classify_via_subdomain(d: str, probe: ProbeResult) -> DomainResult | None:
     """Full-probe subdomain candidates; prefer open stores over locked ones.
 
-    For each candidate (capped at _MAX_SUBDOMAIN_PROBES):
+    For each candidate (capped at _MAX_SUBDOMAIN_PROBES — bounds requests per
+    domain; cart.js + a homepage probe per candidate, and probe_domain returns
+    on its first successful fetch):
     1. cart.js hit → CONFIRMED_SHOPIFY (return immediately — authoritative).
     2. shopify_strong + password_protected → remember as locked, keep scanning.
-    3. shopify_strong only → SHOPIFY_IN_HTML_ACTIVE (return immediately).
+    3. shopify_strong + 200 → SHOPIFY_IN_HTML_ACTIVE (return immediately).
     After the loop: if a locked candidate was found, return SHOPIFY_PASSWORD_PROTECTED.
     """
     locked_host: str | None = None
@@ -182,7 +186,7 @@ def _classify_via_subdomain(d: str, probe: ProbeResult) -> DomainResult | None:
                 locked_host = sub
             continue
 
-        if sub_probe.shopify_strong:
+        if sub_probe.shopify_strong and sub_probe.status == 200:
             return DomainResult(
                 d,
                 Category.SHOPIFY_IN_HTML_ACTIVE,

@@ -15,8 +15,10 @@ def _subdomain_hosts(body: str, base: str) -> list[str]:
     Matches any subdomain label (single or multi-level), e.g. eu.x.com,
     checkout.eu.x.com. Uses a compiled regex with the escaped base."""
     escaped = re.escape(base)
+    # Trailing negative lookahead so `base.com` is NOT captured out of a longer
+    # domain like `base.com.evil.com` (the host must end at the registrable base).
     pattern = re.compile(
-        r"\b([a-z0-9][a-z0-9.-]*\." + escaped + r")\b"
+        r"\b([a-z0-9][a-z0-9.-]*\." + escaped + r")(?![a-z0-9.-])"
     )
     return pattern.findall(body)
 

@@ -177,8 +177,10 @@ def test_bare_shopify_word_no_dot_com_is_not_shopify_strong():
          patch.object(detector, "probe_domain", side_effect=[apex_probe, weak_probe]):
         r = detector.classify_domain("x.com")
 
-    # shopify_strong=False → not classified as headless active
-    assert r.category != Category.SHOPIFY_IN_HTML_ACTIVE or r.discovered_domain != "shop.x.com"
+    # The subdomain has only a bare "shopify" mention (shopify_strong=False), so it
+    # must NOT be recovered as a Shopify subdomain — no false positive.
+    assert r.category == Category.NOT_SHOPIFY
+    assert r.discovered_domain is None
 
 
 def test_reason_for_password_protected():

@@ -53,16 +53,16 @@ def test_not_shopify_no_platform():
 
 # v0.3.0: password-protected branch
 
-def test_password_protected_with_shopify_platform():
-    """password_protected + shopify in platforms → SHOPIFY_PASSWORD_PROTECTED."""
+def test_password_protected_with_shopify_strong():
+    """password_protected + shopify.com strong signal → SHOPIFY_PASSWORD_PROTECTED."""
     cat, plat = categorize(_probe(
-        status=200, platforms=("shopify",), password_protected=True
+        status=200, platforms=("shopify",), password_protected=True, shopify_strong=True
     ))
     assert cat == Category.SHOPIFY_PASSWORD_PROTECTED and plat is None
 
 
-def test_password_protected_with_shopify_strong():
-    """password_protected + shopify_strong (no platforms) → SHOPIFY_PASSWORD_PROTECTED."""
+def test_password_protected_strong_signal_no_platforms():
+    """password_protected + shopify_strong (no platforms list) → password-protected."""
     cat, plat = categorize(_probe(
         status=200, platforms=(), password_protected=True, shopify_strong=True
     ))
@@ -75,10 +75,20 @@ def test_password_protected_without_shopify_is_not_password_category():
     assert cat == Category.NOT_SHOPIFY
 
 
-def test_password_protected_takes_priority_over_active():
-    """A password-protected shopify page must NOT be classified as active."""
+def test_password_protected_requires_strong_signal_not_bare_word():
+    """A /password page with only a bare 'shopify' mention (no shopify.com) is NOT
+    treated as password-protected — the strong signal is required for precision."""
     cat, plat = categorize(_probe(
-        status=200, platforms=("shopify",), password_protected=True
+        status=200, platforms=("shopify",), password_protected=True, shopify_strong=False
+    ))
+    assert cat != Category.SHOPIFY_PASSWORD_PROTECTED
+    assert cat == Category.SHOPIFY_IN_HTML_ACTIVE
+
+
+def test_password_protected_takes_priority_over_active():
+    """A password-protected shopify page (strong signal) must NOT be 'active'."""
+    cat, plat = categorize(_probe(
+        status=200, platforms=("shopify",), password_protected=True, shopify_strong=True
     ))
     assert cat != Category.SHOPIFY_IN_HTML_ACTIVE
     assert cat == Category.SHOPIFY_PASSWORD_PROTECTED

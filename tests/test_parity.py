@@ -19,9 +19,12 @@ REFERENCE_TRUTH = [
     (("unreachable", (), False, False, False, False), "dead"),
     ((200, ("woocommerce",), False, False, False, False), "not-shopify"),
     ((200, (), False, False, False, False), "not-shopify"),
-    # v0.3.0: password-protected Shopify store (pre-launch)
-    ((200, ("shopify",), False, False, True, False), "shopify-password-protected"),
+    # v0.3.0: password-protected requires the strong shopify.com signal.
+    ((200, ("shopify",), False, False, True, True), "shopify-password-protected"),
     ((200, (), False, False, True, True), "shopify-password-protected"),
+    # /password with only a bare "shopify" mention (no shopify.com) → not trusted
+    # as password-protected; falls through to active.
+    ((200, ("shopify",), False, False, True, False), "shopify-in-html-active"),
 ]
 
 
