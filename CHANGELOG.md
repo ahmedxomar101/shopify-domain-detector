@@ -3,6 +3,31 @@
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/)
 and [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-06-07
+### Added
+- Arbitrary-subdomain HTML harvesting: `extract_shop_hosts` now captures every
+  `*.<base>` subdomain (any label, including multi-level) found in body HTML,
+  not just `shop.`/`store.`. Document-order HTML hosts appear before
+  `*.myshopify.com` refs, which appear before blind `shop.`/`store.` fallbacks.
+- `has_shopify_strong(body)` in `signatures.py`: returns `True` when the body
+  contains `"shopify.com"` — matches `cdn.shopify.com` and `*.myshopify.com`
+  without false-positive on a bare `"shopify"` word.
+- `Category.SHOPIFY_PASSWORD_PROTECTED` for pre-launch stores whose root
+  redirects to `/password`. Not healthy (`is_healthy` remains False).
+- `ProbeResult.password_protected` and `ProbeResult.shopify_strong` fields
+  (both `bool`, default `False`), populated by `probe_domain()`.
+- Full subdomain probe in `_classify_via_subdomain`: each candidate is checked
+  with `cart.js` first, then a full `probe_domain()` call. Open stores
+  (shopify_strong, not password-protected) are returned immediately; locked
+  candidates (password_protected) are remembered as a fallback in case no
+  open store is found in the candidate list.
+
+### Changed
+- `categorize()` checks `password_protected` before the active/suspended
+  branches — a pre-launch store is never classified as active.
+- Parity truth table in `test_parity.py` extended to 6-tuple row format
+  (adds `password_protected` and `shopify_strong` columns); 2 new rows.
+
 ## [0.2.0] - 2026-06-07
 ### Added
 - `shop.`/`store.` subdomain detection: when the apex is a marketing site, the
