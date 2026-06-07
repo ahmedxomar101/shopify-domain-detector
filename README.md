@@ -71,6 +71,8 @@ flowchart TD
 
 **Stage 2 — HTML signature fallback.** For everything else, fetch the homepage across `https`/`http` and the bare + `www.` hosts, reading the **full body even on 4xx/5xx error pages**, and scan for platform signatures (`cdn.shopify.com`, `myshopify.com`, plus 14 other platforms for negative classification).
 
+**Subdomain detection.** When the apex is a marketing site (e.g. WordPress) but the store lives on a subdomain, candidate storefront hosts (`shop.`/`store.<base>` and any `*.myshopify.com` found in the HTML) are probed via `/cart.js`; a hit is confirmed with `match_type="subdomain"` and `discovered_domain` set to that host.
+
 **Categorize.** Rate-limit (429) and bot-protection (403 with no recognizable platform) are separated from content so they don't masquerade as "not Shopify." Shopify pages that show "this store is unavailable" or return 4xx are marked *suspended* (a closed store — not a usable lead).
 
 ## Categories
@@ -107,7 +109,7 @@ categorize(probe: ProbeResult) -> tuple[Category, str | None]   # pure, testable
 probe_domain(domain: str) -> ProbeResult
 ```
 
-`DomainResult` fields: `domain`, `category` (`Category`), `platform` (for `not-shopify`), `redirects_to` (for `redirects-to-shopify`), `status`, and the `is_shopify` convenience property.
+`DomainResult` fields: `domain`, `category` (`Category`), `platform` (for `not-shopify`), `discovered_domain` (the exact host where Shopify was confirmed — apex, `www`, a `shop.`/`store.` subdomain, or a redirect target; `None` otherwise), `match_type` (`apex` / `www` / `subdomain` / `redirect` / `""`), `reason` (short human explanation), `status`, and the `is_shopify` convenience property.
 
 ## Security & ethics
 

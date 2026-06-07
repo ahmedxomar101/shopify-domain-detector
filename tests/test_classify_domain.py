@@ -19,7 +19,26 @@ def test_redirect_to_other_shopify_domain():
          patch.object(detector, "_resolve_redirect", return_value="realstore.com"):
         r = detector.classify_domain("vanity.com")
     assert r.category == Category.REDIRECTS_TO_SHOPIFY
-    assert r.redirects_to == "realstore.com"
+    assert r.discovered_domain == "realstore.com"
+    assert r.match_type == "redirect"
+
+
+def test_subdomain_detection_confirms_on_shop_host():
+    probe = ProbeResult(
+        domain="example.com", status=200, platforms=("wordpress",),
+        shop_subdomains=("shop.example.com",),
+    )
+
+    def fake_cart(domain, **kw):
+        return domain == "shop.example.com"
+
+    with patch.object(detector, "cart_js_is_shopify", side_effect=fake_cart), \
+         patch.object(detector, "_resolve_redirect", return_value=None), \
+         patch.object(detector, "probe_domain", return_value=probe):
+        r = detector.classify_domain("example.com")
+    assert r.category == Category.CONFIRMED_SHOPIFY
+    assert r.discovered_domain == "shop.example.com"
+    assert r.match_type == "subdomain"
 
 
 def test_falls_through_to_probe_not_shopify():

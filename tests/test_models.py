@@ -28,3 +28,24 @@ def test_probe_result_defaults():
     assert p.platforms == ()
     assert p.suspended_shopify is False
     assert p.rate_limited is False
+    assert p.shop_subdomains == ()
+
+
+def test_domain_result_v2_fields_default():
+    r = DomainResult(domain="x.com", category=Category.NOT_SHOPIFY)
+    assert r.discovered_domain is None
+    assert r.match_type == ""
+    assert r.reason == ""
+
+
+def test_domain_result_discovered_domain_and_match_type():
+    r = DomainResult(
+        domain="x.com",
+        category=Category.CONFIRMED_SHOPIFY,
+        discovered_domain="shop.x.com",
+        match_type="subdomain",
+        reason="cart.js on subdomain (shop.x.com)",
+    )
+    assert r.discovered_domain == "shop.x.com"
+    assert r.match_type == "subdomain"
+    assert r.reason.startswith("cart.js")

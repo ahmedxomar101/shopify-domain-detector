@@ -36,6 +36,7 @@ class ProbeResult:
     resolved_domain: str | None = None
     server: str = ""
     html_size: int = 0
+    shop_subdomains: tuple[str, ...] = ()    # candidate Shopify storefront hosts
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,9 @@ class DomainResult:
     domain: str
     category: Category
     platform: str | None = None              # set for NOT_SHOPIFY
-    redirects_to: str | None = None          # set for REDIRECTS_TO_SHOPIFY
+    discovered_domain: str | None = None     # host where Shopify was confirmed
+    match_type: str = ""                     # apex | www | subdomain | redirect
+    reason: str = ""                         # short human explanation
     status: int | str | None = None
 
     @property
