@@ -33,3 +33,12 @@ def detect_platforms(body: str) -> list[str]:
 
 def is_suspended(body: str) -> bool:
     return _SUSPENDED_TITLE in body
+
+
+def has_shopify_strong(body: str) -> bool:
+    """True iff the lowercased body contains 'shopify.com'.
+
+    This is a stronger signal than a bare 'shopify' word: it matches
+    cdn.shopify.com and *.myshopify.com but not a stray mention of 'shopify'
+    with no domain, preventing false positives on status/blog pages."""
+    return "shopify.com" in body

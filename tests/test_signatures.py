@@ -1,4 +1,4 @@
-from shopify_domain_detector.signatures import detect_platforms, is_suspended
+from shopify_domain_detector.signatures import detect_platforms, has_shopify_strong, is_suspended
 
 
 def test_detects_shopify_signature():
@@ -20,3 +20,22 @@ def test_no_signature_returns_empty():
 def test_suspended_detection():
     assert is_suspended("Sorry, this store is unavailable.".lower())
     assert not is_suspended("welcome to our shop".lower())
+
+
+# v0.3.0: has_shopify_strong — "shopify.com" substring test
+
+def test_has_shopify_strong_cdn_shopify_com():
+    assert has_shopify_strong("cdn.shopify.com") is True
+
+
+def test_has_shopify_strong_myshopify_com():
+    assert has_shopify_strong("mystore.myshopify.com") is True
+
+
+def test_has_shopify_strong_false_for_bare_shopify_word():
+    """'shopify' without '.com' must NOT match — avoids false positives."""
+    assert has_shopify_strong("we love shopify and use it") is False
+
+
+def test_has_shopify_strong_false_for_empty():
+    assert has_shopify_strong("") is False
