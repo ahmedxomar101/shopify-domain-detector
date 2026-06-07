@@ -38,7 +38,9 @@ def main(argv: list[str] | None = None) -> int:
                 "category": r.category.value,
                 "is_shopify": r.is_shopify,
                 "platform": r.platform,
-                "redirects_to": r.redirects_to,
+                "discovered_domain": r.discovered_domain,
+                "match_type": r.match_type,
+                "reason": r.reason,
             }))
         return 0
 
