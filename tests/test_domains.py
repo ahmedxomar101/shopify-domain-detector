@@ -6,7 +6,8 @@ from shopify_domain_detector.domains import base_domain, is_same_domain, normali
 @pytest.mark.parametrize("raw,expected", [
     ("https://Example.com/", "example.com"),
     ("http://www.shop.example.com", "www.shop.example.com"),
-    ("  EXAMPLE.com/path/  ", "example.com/path"),
+    ("  EXAMPLE.com/path/  ", "example.com"),
+    ("https://example.com/collections/all?x=1#f", "example.com"),
     ("example.com", "example.com"),
 ])
 def test_normalize_strips_scheme_lowercases_trims(raw, expected):

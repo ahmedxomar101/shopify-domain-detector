@@ -38,13 +38,21 @@ def build_request(url: str) -> urllib.request.Request:
 
 def open_url(req: urllib.request.Request, timeout: int):
     """urlopen with TLS verified by default; fall back to unverified ONLY on a
-    certificate error so we can still classify misconfigured stores. Re-raises
-    HTTPError so callers can read error-page bodies."""
+    certificate/SSL error so we can still classify misconfigured stores. Re-raises
+    HTTPError so callers can read error-page bodies.
+
+    Note: CPython wraps handshake SSL errors in urllib.error.URLError whose
+    `.reason` is the ssl.SSLError, so we must inspect the reason, not just catch
+    the bare ssl exception."""
     try:
         return urllib.request.urlopen(req, timeout=timeout, context=_verified_context())
     except urllib.error.HTTPError:
         raise
-    except ssl.SSLCertVerificationError:
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, ssl.SSLError):
+            return urllib.request.urlopen(req, timeout=timeout, context=_unverified_context())
+        raise
+    except ssl.SSLError:
         return urllib.request.urlopen(req, timeout=timeout, context=_unverified_context())
 
 

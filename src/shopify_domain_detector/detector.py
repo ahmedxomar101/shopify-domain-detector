@@ -112,5 +112,9 @@ def classify_domains(domains: list[str], workers: int = 15) -> dict[str, DomainR
         futures = {ex.submit(classify_domain, d): d for d in domains}
         for fut in futures:
             d = futures[fut]
-            results[d] = fut.result()
+            try:
+                results[d] = fut.result()
+            except Exception:
+                # Never let one domain abort the whole batch (matters at scale).
+                results[d] = DomainResult(d, Category.DEAD)
     return results

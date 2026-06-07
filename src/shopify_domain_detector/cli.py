@@ -47,7 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         counts[r.category.value] = counts.get(r.category.value, 0) + 1
     total = len(results)
     healthy = sum(1 for r in results.values() if r.is_shopify)
-    print(f"Total: {total}  Shopify (healthy): {healthy} ({healthy * 100 // total}%)")
+    pct = (healthy * 100 // total) if total else 0
+    print(f"Total: {total}  Shopify (healthy): {healthy} ({pct}%)")
     for cat in sorted(counts):
         print(f"  {cat}: {counts[cat]}")
     return 0

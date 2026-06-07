@@ -37,3 +37,15 @@ def test_classify_domains_returns_dict_keyed_by_input():
         m.side_effect = lambda d, **k: DomainResult(d, Category.DEAD)
         out = detector.classify_domains(["a.com", "b.com"], workers=2)
     assert set(out) == {"a.com", "b.com"}
+
+
+def test_classify_domains_survives_a_worker_exception():
+    def flaky(d):
+        if d == "boom.com":
+            raise RuntimeError("unexpected")
+        return DomainResult(d, Category.CONFIRMED_SHOPIFY)
+
+    with patch.object(detector, "classify_domain", side_effect=flaky):
+        out = detector.classify_domains(["ok.com", "boom.com"], workers=2)
+    assert out["ok.com"].category == Category.CONFIRMED_SHOPIFY
+    assert out["boom.com"].category == Category.DEAD  # errored domain is not lost

@@ -5,10 +5,11 @@ _CC_SLDS = {"co", "com", "org", "net", "edu", "gov", "ac"}
 
 
 def normalize(raw: str) -> str:
-    """Lowercase, strip scheme and surrounding whitespace, trim trailing slash."""
+    """Lowercase, strip scheme/whitespace, and reduce to the host (drop any
+    path, query, or fragment) so URL construction downstream is correct."""
     d = raw.strip().lower()
     d = d.replace("https://", "").replace("http://", "")
-    return d.rstrip("/")
+    return d.split("/")[0].split("?")[0].split("#")[0]
 
 
 def base_domain(domain: str) -> str:
