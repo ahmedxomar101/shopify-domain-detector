@@ -8,6 +8,7 @@ class Category(str, Enum):
     CONFIRMED_SHOPIFY = "confirmed-shopify"
     SHOPIFY_IN_HTML_ACTIVE = "shopify-in-html-active"
     SHOPIFY_IN_HTML_SUSPENDED = "shopify-in-html-suspended"
+    SHOPIFY_PASSWORD_PROTECTED = "shopify-password-protected"
     REDIRECTS_TO_SHOPIFY = "redirects-to-shopify"
     NOT_SHOPIFY = "not-shopify"
     DEAD = "dead"
@@ -37,6 +38,8 @@ class ProbeResult:
     server: str = ""
     html_size: int = 0
     shop_subdomains: tuple[str, ...] = ()    # candidate Shopify storefront hosts
+    password_protected: bool = False         # final URL path is /password
+    shopify_strong: bool = False             # body contains "shopify.com"
 
 
 @dataclass(frozen=True)

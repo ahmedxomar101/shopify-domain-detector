@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .domains import base_domain, is_same_domain, normalize
 from .http import PROBE_TIMEOUT, build_request, cart_js_is_shopify, open_url
 from .models import Category, DomainResult, ProbeResult
-from .signatures import detect_platforms, is_suspended
+from .signatures import detect_platforms, has_shopify_strong, is_suspended
 from .subdomains import extract_shop_hosts
 
 # Cap subdomain cart.js probes to bound the number of extra requests per domain.
@@ -21,11 +21,16 @@ def categorize(probe: ProbeResult) -> tuple[Category, str | None]:
     platforms = probe.platforms
     has_shopify = "shopify" in platforms
     is_4xx_plus = isinstance(status, int) and status >= 400
+    has_shopify_signal = has_shopify or probe.shopify_strong
 
     if probe.rate_limited:
         return Category.RATE_LIMITED, None
     if isinstance(status, int) and status == 403 and not platforms:
         return Category.BOT_PROTECTED, None
+    # Password-protected must come before active/suspended: a /password redirect
+    # means the store is pre-launch and not yet open, regardless of HTML signals.
+    if probe.password_protected and has_shopify_signal:
+        return Category.SHOPIFY_PASSWORD_PROTECTED, None
     if has_shopify and not probe.suspended_shopify and status == 200:
         return Category.SHOPIFY_IN_HTML_ACTIVE, None
     if has_shopify and probe.suspended_shopify:
@@ -54,6 +59,13 @@ def _resolve_redirect(domain: str) -> str | None:
     return None
 
 
+def _is_password_path(url: str) -> bool:
+    """True if the final URL resolved to /password (or /password/)."""
+    import urllib.parse
+    path = urllib.parse.urlsplit(url).path.rstrip("/")
+    return path == "/password"
+
+
 def probe_domain(domain: str) -> ProbeResult:
     """Fetch the homepage (bare + www., https+http), reading error-page bodies."""
     candidates = [domain]
@@ -77,6 +89,8 @@ def probe_domain(domain: str) -> ProbeResult:
                         shop_subdomains=tuple(
                             extract_shop_hosts(body, base_domain(domain))
                         ),
+                        password_protected=_is_password_path(resp.url),
+                        shopify_strong=has_shopify_strong(body),
                     )
             except urllib.error.HTTPError as e:
                 try:
@@ -94,6 +108,7 @@ def probe_domain(domain: str) -> ProbeResult:
                     shop_subdomains=tuple(
                         extract_shop_hosts(body, base_domain(domain))
                     ) if body else (),
+                    shopify_strong=has_shopify_strong(body) if body else False,
                 )
             except Exception:
                 continue
@@ -104,6 +119,7 @@ _REASONS = {
     Category.CONFIRMED_SHOPIFY: "shopify cart.js / signature",
     Category.SHOPIFY_IN_HTML_ACTIVE: "shopify cart.js / signature",
     Category.SHOPIFY_IN_HTML_SUSPENDED: "shopify store unavailable/suspended",
+    Category.SHOPIFY_PASSWORD_PROTECTED: "password-protected Shopify store",
     Category.DEAD: "unreachable",
     Category.RATE_LIMITED: "rate limited (429)",
     Category.BOT_PROTECTED: "bot-protected (403)",
@@ -146,10 +162,45 @@ def _classify_via_redirect(d: str, resolved: str) -> DomainResult | None:
 
 
 def _classify_via_subdomain(d: str, probe: ProbeResult) -> DomainResult | None:
-    """Probe storefront subdomain candidates; confirm on the first hit."""
+    """Full-probe subdomain candidates; prefer open stores over locked ones.
+
+    For each candidate (capped at _MAX_SUBDOMAIN_PROBES):
+    1. cart.js hit → CONFIRMED_SHOPIFY (return immediately — authoritative).
+    2. shopify_strong + password_protected → remember as locked, keep scanning.
+    3. shopify_strong only → SHOPIFY_IN_HTML_ACTIVE (return immediately).
+    After the loop: if a locked candidate was found, return SHOPIFY_PASSWORD_PROTECTED.
+    """
+    locked_host: str | None = None
+
     for sub in probe.shop_subdomains[:_MAX_SUBDOMAIN_PROBES]:
         if cart_js_is_shopify(sub):
             return _confirmed(d, sub, "subdomain", f"cart.js on subdomain ({sub})")
+
+        sub_probe = probe_domain(sub)
+        if sub_probe.shopify_strong and sub_probe.password_protected:
+            if locked_host is None:
+                locked_host = sub
+            continue
+
+        if sub_probe.shopify_strong:
+            return DomainResult(
+                d,
+                Category.SHOPIFY_IN_HTML_ACTIVE,
+                discovered_domain=sub,
+                match_type="subdomain",
+                reason=f"shopify.com in HTML on subdomain ({sub})",
+                status=sub_probe.status,
+            )
+
+    if locked_host is not None:
+        return DomainResult(
+            d,
+            Category.SHOPIFY_PASSWORD_PROTECTED,
+            discovered_domain=locked_host,
+            match_type="subdomain",
+            reason=f"password-protected Shopify store on subdomain ({locked_host})",
+        )
+
     return None
 
 

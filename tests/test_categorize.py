@@ -49,3 +49,36 @@ def test_not_shopify_records_other_platform():
 def test_not_shopify_no_platform():
     cat, plat = categorize(_probe(status=200, platforms=()))
     assert cat == Category.NOT_SHOPIFY and plat is None
+
+
+# v0.3.0: password-protected branch
+
+def test_password_protected_with_shopify_platform():
+    """password_protected + shopify in platforms → SHOPIFY_PASSWORD_PROTECTED."""
+    cat, plat = categorize(_probe(
+        status=200, platforms=("shopify",), password_protected=True
+    ))
+    assert cat == Category.SHOPIFY_PASSWORD_PROTECTED and plat is None
+
+
+def test_password_protected_with_shopify_strong():
+    """password_protected + shopify_strong (no platforms) → SHOPIFY_PASSWORD_PROTECTED."""
+    cat, plat = categorize(_probe(
+        status=200, platforms=(), password_protected=True, shopify_strong=True
+    ))
+    assert cat == Category.SHOPIFY_PASSWORD_PROTECTED and plat is None
+
+
+def test_password_protected_without_shopify_is_not_password_category():
+    """password_protected with no shopify signals → falls through normally."""
+    cat, plat = categorize(_probe(status=200, platforms=(), password_protected=True))
+    assert cat == Category.NOT_SHOPIFY
+
+
+def test_password_protected_takes_priority_over_active():
+    """A password-protected shopify page must NOT be classified as active."""
+    cat, plat = categorize(_probe(
+        status=200, platforms=("shopify",), password_protected=True
+    ))
+    assert cat != Category.SHOPIFY_IN_HTML_ACTIVE
+    assert cat == Category.SHOPIFY_PASSWORD_PROTECTED
