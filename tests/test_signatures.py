@@ -17,6 +17,19 @@ def test_no_signature_returns_empty():
     assert detect_platforms("plain html nothing here") == []
 
 
+def test_detect_platforms_ignores_bare_shopify_word():
+    """v0.3.1: a bare 'shopify' mention in prose (e.g. a blog citing
+    'Shopify sales data') must NOT flag the page as a Shopify store. Only
+    asset/backend domains (cdn.shopify.com / myshopify.com) count."""
+    body = "today shopify sales data shows a rise in camping gear".lower()
+    assert "shopify" not in detect_platforms(body)
+
+
+def test_detect_platforms_myshopify_backend():
+    body = '<script>domain:"olivers-real-food.myshopify.com"</script>'.lower()
+    assert "shopify" in detect_platforms(body)
+
+
 def test_suspended_detection():
     assert is_suspended("Sorry, this store is unavailable.".lower())
     assert not is_suspended("welcome to our shop".lower())

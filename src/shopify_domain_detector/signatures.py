@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Body must already be lowercased by the caller.
 PLATFORM_SIGNATURES: dict[str, list[str]] = {
-    "shopify": ["cdn.shopify.com", "myshopify.com", "shopify"],
+    "shopify": ["cdn.shopify.com", "myshopify.com"],
     "woocommerce": ["woocommerce", "wp-content/plugins/woocommerce"],
     "wordpress": ["wordpress", "wp-json", "wp-content"],
     "squarespace": ["squarespace", "sqsp.net"],

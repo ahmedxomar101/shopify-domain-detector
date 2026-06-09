@@ -3,6 +3,16 @@
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/)
 and [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-06-10
+### Fixed
+- Apex false positive: `PLATFORM_SIGNATURES["shopify"]` dropped the bare
+  `"shopify"` keyword, leaving only `cdn.shopify.com` / `myshopify.com`. A page
+  that merely *mentions* the word "Shopify" in prose (e.g. a blog citing
+  "Shopify sales data") is no longer misclassified as `shopify-in-html-active`.
+  The apex content check now matches the same strong-signal intent as
+  `has_shopify_strong`. The subdomain and password-protected paths were already
+  strong-signal-gated and are unchanged.
+
 ## [0.3.0] - 2026-06-07
 ### Added
 - Arbitrary-subdomain HTML harvesting: `extract_shop_hosts` now captures every

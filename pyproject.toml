@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "shopify-domain-detector"
-version = "0.3.0"
+version = "0.3.1"
 description = "Detect whether a web domain is a live Shopify store — dependency-free, fast, redirect- and WAF-aware."
 readme = "README.md"
 requires-python = ">=3.10"
