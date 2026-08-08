@@ -30,6 +30,16 @@ def test_detect_platforms_myshopify_backend():
     assert "shopify" in detect_platforms(body)
 
 
+def test_detect_platforms_suspended_store_meta_tag():
+    """v0.3.2: Shopify's own "This store is unavailable" template contains
+    neither cdn.shopify.com nor myshopify.com, only a <meta name="shopify-y">
+    tag. Confirmed on 34/268 real not-shopify verdicts in a 600-domain sample
+    before this fix. "shopify-y" is a meta-tag name Shopify's platform emits,
+    not prose, so it does not reintroduce the v0.3.1 bare-word false positive."""
+    body = '<meta name="shopify-y" content="00000000-0000-0000-0000-000000000000">'.lower()
+    assert "shopify" in detect_platforms(body)
+
+
 def test_suspended_detection():
     assert is_suspended("Sorry, this store is unavailable.".lower())
     assert not is_suspended("welcome to our shop".lower())

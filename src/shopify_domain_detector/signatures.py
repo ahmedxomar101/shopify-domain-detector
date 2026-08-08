@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 # Body must already be lowercased by the caller.
+#
+# All keywords must be technical markers Shopify's own platform emits (asset/
+# backend domains, meta-tag names), never a bare English word — see v0.3.1,
+# which dropped a bare "shopify" keyword after it false-positived on prose
+# ("...Shopify sales data..."). "shopify-y" is the `<meta name="shopify-y">`
+# tag Shopify's suspended-store template ("This store is unavailable") emits;
+# it is not a phrase a page author would type, so it carries the same
+# precision as the domain markers around it (v0.3.2).
 PLATFORM_SIGNATURES: dict[str, list[str]] = {
-    "shopify": ["cdn.shopify.com", "myshopify.com"],
+    "shopify": ["cdn.shopify.com", "myshopify.com", "shopify-y"],
     "woocommerce": ["woocommerce", "wp-content/plugins/woocommerce"],
     "wordpress": ["wordpress", "wp-json", "wp-content"],
     "squarespace": ["squarespace", "sqsp.net"],

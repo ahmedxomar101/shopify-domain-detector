@@ -3,6 +3,37 @@
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/)
 and [Semantic Versioning](https://semver.org/).
 
+## [0.3.2] - 2026-08-08
+### Fixed
+- Suspended-store false negative: Shopify's own "This store is unavailable"
+  page (served on 404/423 for closed stores) contains neither
+  `cdn.shopify.com` nor `myshopify.com` — only a
+  `<meta name="shopify-y" content="...">` tag — so `has_shopify` in
+  `categorize()` never went true and every suspended store fell through to
+  `NOT_SHOPIFY`, even though `is_suspended()` correctly recognized the page.
+  Measured on a real 600-domain sample: **34 of 268 `not-shopify` verdicts
+  (12.7%)** were actually suspended Shopify stores. `PLATFORM_SIGNATURES`
+  now includes `"shopify-y"`.
+  - This is a technical marker Shopify's own template emits (a meta-tag
+    name), not a prose word — it does not reintroduce the v0.3.1 bare-
+    `"shopify"` false positive on unrelated pages that merely mention the
+    company. `detect_platforms()`/`PLATFORM_SIGNATURES` has exactly one
+    caller (`probe_domain()`), so the blast radius of this addition is
+    fully understood.
+  - Rejected alternative: trusting `is_suspended()`'s "this store is
+    unavailable" text alone, without the `has_shopify` gate. Generic
+    suspension phrasing is plausible on unrelated hosting providers' error
+    pages, so that would trade this false negative for a false positive in
+    the opposite direction. `categorize()`'s branch order and gates are
+    unchanged; only the signature list changed.
+  - Verified: all 34 evidence domains now classify
+    `shopify-in-html-suspended`; re-running the other 234 `not-shopify`
+    domains from the same sample and a known-good/known-bad control set
+    showed no new false positives.
+- `__init__.py`'s `__version__` was still `"0.3.0"`, one release behind
+  `pyproject.toml`'s `0.3.1` (the v0.3.1 release didn't update it). Both are
+  now `0.3.2`.
+
 ## [0.3.1] - 2026-06-10
 ### Fixed
 - Apex false positive: `PLATFORM_SIGNATURES["shopify"]` dropped the bare
