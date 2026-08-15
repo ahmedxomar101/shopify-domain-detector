@@ -1,4 +1,5 @@
 import ssl
+from types import SimpleNamespace
 import urllib.error
 from unittest.mock import patch
 
@@ -18,23 +19,29 @@ def test_open_url_falls_back_to_unverified_on_wrapped_cert_error():
     open_url must still fall back to an unverified read."""
     seen = []
 
-    def fake_urlopen(req, timeout, context):
+    # Patches guarded_opener, not urlopen: open_url stopped calling the
+    # module-level urlopen when the redirect guard landed, because the default
+    # opener follows redirects unchecked. Patching the old seam would have gone
+    # green against code that never runs.
+    def fake_opener(context=None):
         seen.append(context.verify_mode)
         if context.verify_mode != ssl.CERT_NONE:
             raise urllib.error.URLError(ssl.SSLCertVerificationError("bad cert"))
-        return "OK"
+        return SimpleNamespace(open=lambda req, timeout=None: "OK")
 
-    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch.object(http, "guarded_opener", side_effect=fake_opener), \
+         patch.object(http, "assert_target_is_public"):
         result = http.open_url(build_request("https://x.com"), 5)
     assert result == "OK"
     assert seen[0] != ssl.CERT_NONE and seen[-1] == ssl.CERT_NONE
 
 
 def test_open_url_reraises_non_cert_urlerror():
-    def fake_urlopen(req, timeout, context):
+    def fake_opener(context=None):
         raise urllib.error.URLError("connection refused")
 
-    with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+    with patch.object(http, "guarded_opener", side_effect=fake_opener), \
+         patch.object(http, "assert_target_is_public"):
         try:
             http.open_url(build_request("https://x.com"), 5)
             raised = False
